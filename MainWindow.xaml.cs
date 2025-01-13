@@ -16,6 +16,12 @@ using CsvHelper;
 using System.Globalization;
 using CsvHelper.Configuration.Attributes;
 using CsvHelper.Configuration;
+using Microsoft.Office.Interop.Word;
+using Range = Microsoft.Office.Interop.Word.Range;
+using MailMessage = System.Net.Mail.MailMessage;
+using Window = System.Windows.Window;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing; // For Text
 
 namespace Send_Whatsapp
 {
@@ -34,35 +40,20 @@ namespace Send_Whatsapp
             LoadContactsToDataGrid();  // Load contacts into DataGrid on startup
         }
 
-        //public void LoadContactsToDataGrid()
-        //{
-        //    // Load data into the DataGrid
-        //    dataGridContacts.ItemsSource = dbHelper.LoadContacts();
-
-        //    // Get the count of items in the DataGrid
-        //    int itemCount = dataGridContacts.Items.Count;
-
-        //    //MessageBox.Show($"Total contacts: {itemCount}");
-        //}
         public void LoadContactsToDataGrid()
         {
             dataGridContacts.ItemsSource = dbHelper.LoadContacts();
             dataGridContacts.Items.Refresh(); // Refresh the DataGrid to show the updated list
         }
-
-
-
         private void InitializeWebDriver()
         {
             var options = new ChromeOptions();
             options.AddArguments("--start-maximized");
-            webDriver = new ChromeDriver(options);
+
+            // Specify the full path to the ChromeDriver executable
+            webDriver = new ChromeDriver(@"C:\chromedriver-win64\chromedriver.exe", options);
             webDriver.Navigate().GoToUrl(WhatsAppWebUrl);
-
-            // Load cookies if available
-            LoadCookies();
         }
-
         private bool IsLoggedIn()
         {
             try
@@ -76,105 +67,6 @@ namespace Send_Whatsapp
                 return false;  // Not logged in
             }
         }
-
-
-        //private void btnSendWhatsApp_Click(object sender, RoutedEventArgs e)
-        //{
-        //    if (listBoxStatus.Visibility == Visibility.Collapsed && Keyboard.IsKeyDown(Key.LeftCtrl) )
-        //    {
-        //        listBoxStatus.Visibility = Visibility.Visible;
-        //    }else if (listBoxStatus.Visibility == Visibility.Visible && Keyboard.IsKeyDown(Key.RightCtrl))
-        //    {
-        //        listBoxStatus.Visibility = Visibility.Collapsed;
-        //    }
-        //    // Initialize WebDriver if not already initialized
-        //    if (webDriver == null)
-        //    {
-        //        InitializeWebDriver();
-        //    }
-        //    // Check if the Ctrl key is pressed
-        //    bool isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
-        //    string[] contactNumbers = txtContactNumberEntry.Text.Split(',');  // Assuming contact numbers are separated by commas
-        //    string message = new TextRange(rtbMessage.Document.ContentStart, rtbMessage.Document.ContentEnd).Text;
-
-        //    if (contactNumbers.Length == 0 || string.IsNullOrWhiteSpace(message))
-        //    {
-        //        MessageBox.Show("Contact number(s) and message cannot be empty.");
-        //        return;
-        //    }
-
-        //    WebDriverWait wait = new WebDriverWait(webDriver, TimeSpan.FromSeconds(30));
-
-        //    foreach (string contactNumber in contactNumbers)
-        //    {
-        //        string trimmedNumber = contactNumber.Trim();
-
-        //        if (string.IsNullOrWhiteSpace(trimmedNumber))
-        //            continue;
-
-        //        try
-        //        {
-        //            // Search for the contact and send the WhatsApp message
-        //            var searchInputBox = wait.Until(driver =>
-        //            {
-        //                try
-        //                {
-        //                    return driver.FindElement(By.XPath("//div[@class='x1hx0egp x6ikm8r x1odjw0f x6prxxf x1k6rcq7 x1whj5v']"));
-        //                }
-        //                catch (NoSuchElementException)
-        //                {
-        //                    return null;
-        //                }
-        //            });
-
-        //            if (searchInputBox == null)
-        //            {
-        //                throw new Exception("Search input box not found.");
-        //            }
-
-        //            searchInputBox.Clear();
-        //            searchInputBox.SendKeys(trimmedNumber);
-        //            searchInputBox.SendKeys(Keys.Enter);
-
-
-        //            var chatInputBox = wait.Until(driver =>
-        //            {
-        //                try
-        //                {
-        //                    return driver.FindElement(By.XPath("//div[@aria-placeholder='Type a message']"));
-        //                }
-        //                catch (NoSuchElementException)
-        //                {
-        //                    return null;
-        //                }
-        //            });
-
-
-        //            if (chatInputBox == null)
-        //            {
-        //                throw new Exception("Chat input box not found.");
-        //            }
-        //            var selectedContact = new Contact();
-        //                string personalizedMessage = message.Replace("{Name}", selectedContact.Name);
-        //            chatInputBox.Click();
-        //            chatInputBox.SendKeys(personalizedMessage);
-        //            chatInputBox.SendKeys(Keys.Enter);
-
-        //            listBoxStatus.Items.Add($"Message sent to {trimmedNumber}.");
-        //            System.Threading.Thread.Sleep(2000);  // Add delay between sending messages
-
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            listBoxStatus.Items.Add($"Error sending message to {trimmedNumber}: {ex.Message}");
-        //        }
-        //    }
-        //    // If Ctrl key is pressed, send emails as well
-        //    if (isCtrlPressed)
-        //    {
-        //        SendEmailsToSelectedContacts();
-        //    }
-        //}
         private void btnSendWhatsApp_Click(object sender, RoutedEventArgs e)
         {
             if (listBoxStatus.Visibility == Visibility.Collapsed && Keyboard.IsKeyDown(Key.LeftCtrl))
@@ -195,12 +87,25 @@ namespace Send_Whatsapp
             // Check if the Ctrl key is pressed
             bool isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
             string[] contactNumbers = txtContactNumberEntry.Text.Split(',');  // Assuming contact numbers are separated by commas
+
             string message = new TextRange(rtbMessage.Document.ContentStart, rtbMessage.Document.ContentEnd).Text;
+            message = message.Replace("\r\n", "").Replace("\n", "").Replace("\r", "");
 
             if (contactNumbers.Length == 0 || string.IsNullOrWhiteSpace(message))
             {
                 MessageBox.Show("Contact number(s) and message cannot be empty.");
                 return;
+            }
+
+            // Step 1: Load tags and content from the database
+            var tagContentList = dbHelper.LoadTagContent();  // Method that fetches tags and their content from SQLite
+            foreach (var tagContent in tagContentList)
+            {
+                string tag = tagContent.Tag;
+                string content = tagContent.Content;
+
+                // Step 2: Replace all occurrences of the tag with the corresponding content
+                message = message.Replace(tag, content, StringComparison.OrdinalIgnoreCase);
             }
 
             WebDriverWait wait = new WebDriverWait(webDriver, TimeSpan.FromSeconds(30));
@@ -243,7 +148,6 @@ namespace Send_Whatsapp
                     searchInputBox.Clear();
                     searchInputBox.SendKeys(trimmedNumber);
                     searchInputBox.SendKeys(Keys.Enter);
-
                     var chatInputBox = wait.Until(driver =>
                     {
                         try
@@ -262,45 +166,67 @@ namespace Send_Whatsapp
                     }
 
                     // Replace {Name} with the actual name of the selected contact
-
                     string personalizedMessage = message.Replace("{Name}", selectedContact.Name);
-
-                    //// Add emoji directly to the message (e.g., a smiley face emoji)
-                    //personalizedMessage += " :hey";
 
                     // Split the message into lines based on newline characters
                     string[] messageLines = personalizedMessage.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
-                    // Click the chat input box to focus
-                    chatInputBox.Click();
-
                     // Loop through each line and send it
                     for (int i = 0; i < messageLines.Length; i++)
                     {
-                        // Send the current line
                         chatInputBox.SendKeys(messageLines[i]);
-
-                        // If it's not the last line, add a Shift+Enter for a new line
                         if (i < messageLines.Length - 1)
                         {
                             chatInputBox.SendKeys(Keys.Shift + Keys.Enter);
                         }
                     }
 
-                    chatInputBox.Click();
-                    //chatInputBox.SendKeys(personalizedMessage);
-                    chatInputBox.SendKeys(Keys.Enter);
-                    foreach (var line in messageLines)
+                    if (message.Contains("heart") || message.Contains("sad") || message.Contains("speed") || message.Contains("love"))
                     {
-                        if (line.Contains(":clap") || line.Contains(":white heart") || line.Contains(":heart") || line.Contains(":hey"))
-                        {
-                            chatInputBox.SendKeys(Keys.Enter);
-                            break; // Exit the loop once found and Enter is pressed
-                        }
+                        chatInputBox.SendKeys(Keys.Enter);
+                    }
+                    if (message.Contains("speed") || message.Contains("love"))
+                    {
+                        chatInputBox.SendKeys(Keys.Enter);
+                    }
+                    chatInputBox.SendKeys(Keys.Enter);
+                    string templatePath = @"C:\Users\devan\Desktop\MIND-SWEEPER.docx";
+                    string outputFolder = @"C:\Users\devan\Desktop\HeenaWedInvitation";
+                    string contactName = selectedContact.Name;
+
+                    string updatedFilePath = ReplaceNameInDocument(templatePath, outputFolder, contactName);
+
+                    if (updatedFilePath != null)
+                    {
+                        Console.WriteLine("Document created successfully at " + updatedFilePath);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Document creation failed.");
                     }
 
+                    if (chkSendPDF.IsChecked == true && updatedFilePath != null)
+                    {
+                        var attachIcon = wait.Until(driver =>
+                        {
+                            return driver.FindElement(By.CssSelector("div[aria-label='Attach']"));
+                        });
+                        attachIcon.Click();
 
-                    listBoxStatus.Items.Add($"Message sent to {selectedContact.Name} ({trimmedNumber}).");
+                        var fileInput = wait.Until(driver =>
+                        {
+                            return driver.FindElement(By.CssSelector("input[type='file']"));
+                        });
+                        fileInput.SendKeys(updatedFilePath);
+
+                        var sendButton = wait.Until(driver =>
+                        {
+                            return driver.FindElement(By.CssSelector("span[data-icon='send']"));
+                        });
+                        sendButton.Click();
+                    }
+
+                    listBoxStatus.Items.Add($"Message and PDF sent to {selectedContact.Name} ({trimmedNumber}).");
                     System.Threading.Thread.Sleep(2000);  // Add delay between sending messages
 
                 }
@@ -309,20 +235,50 @@ namespace Send_Whatsapp
                     listBoxStatus.Items.Add($"Error sending message to {trimmedNumber}: {ex.Message}");
                 }
             }
-
-            // If Ctrl key is pressed, send emails as well
-            if (isCtrlPressed)
-            {
-                SendEmailsToSelectedContacts();
-            }
         }
 
+        public static string ReplaceNameInDocument(string templatePath, string outputFolder, string contactName)
+        {
+            // Ensure template file exists
+            if (!File.Exists(templatePath))
+            {
+                Console.WriteLine("Template file not found: " + templatePath);
+                return null;
+            }
+
+            // Define the output path for the personalized document
+            string newFileName = $"Invitation_to_{contactName}.docx";
+            string newFilePath = Path.Combine(outputFolder, newFileName);
+
+            // Copy the template to the new file path
+            File.Copy(templatePath, newFilePath, overwrite: true);
+
+            // Open the copied document for editing
+            using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(newFilePath, true))
+            {
+                // Access the main document part
+                var docText = wordDoc.MainDocumentPart.Document.Body;
+
+                // Replace placeholder {Name} with contactName in all paragraphs
+                foreach (var text in docText.Descendants<Text>())
+                {
+                    if (text.Text.Contains("{Name}"))
+                    {
+                        text.Text = text.Text.Replace("{Name}", contactName);
+                    }
+                }
+
+                // Save the changes to the document
+                wordDoc.MainDocumentPart.Document.Save();
+            }
+
+            // Return the path to the new file for further processing
+            return newFilePath;
+        }
         private void btnSendEmails_Click(object sender, RoutedEventArgs e)
         {
             SendEmailsToSelectedContacts();
         }
-
-
         private void SendEmailsToSelectedContacts()
         {
             string message = new TextRange(rtbMessage.Document.ContentStart, rtbMessage.Document.ContentEnd).Text.Trim();
@@ -380,7 +336,6 @@ namespace Send_Whatsapp
                 }
             }
         }
-
         private void CopyMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (listBoxStatus.SelectedItem != null)
@@ -392,61 +347,6 @@ namespace Send_Whatsapp
                 MessageBox.Show("No item selected to copy.");
             }
         }
-
-        private void SaveCookies()
-        {
-            // Ensure the browser is logged in before saving cookies
-            var cookies = webDriver.Manage().Cookies.AllCookies;
-            using (StreamWriter file = new StreamWriter("cookies.txt"))
-            {
-                foreach (var cookie in cookies)
-                {
-                    file.WriteLine($"{cookie.Name};{cookie.Value};{cookie.Domain};{cookie.Path};{cookie.Expiry};{cookie.Secure}");
-                }
-            }
-        }
-
-        private void LoadCookies()
-        {
-            if (File.Exists("cookies.txt"))
-            {
-                using (StreamReader file = new StreamReader("cookies.txt"))
-                {
-                    string line;
-                    while ((line = file.ReadLine()) != null)
-                    {
-                        var cookieDetails = line.Split(';');
-
-                        // Parse expiry date if it's not null
-                        DateTime? expiry = null;
-                        if (DateTime.TryParse(cookieDetails[4], out DateTime parsedExpiry))
-                        {
-                            expiry = parsedExpiry;
-                        }
-
-                        // Create a new Selenium cookie with all required parameters
-                        OpenQA.Selenium.Cookie cookie = new OpenQA.Selenium.Cookie(
-                            cookieDetails[0],  // Name
-                            cookieDetails[1],  // Value
-                            cookieDetails[2],  // Domain
-                            cookieDetails[3],  // Path
-                            expiry,            // Expiry (can be null)
-                            cookieDetails[5] == "True",  // Secure flag
-                            false,  // isHttpOnly (set to false, you can adjust based on your needs)
-                            "Lax"   // SameSite policy (you can adjust if needed)
-                        );
-
-                        webDriver.Manage().Cookies.AddCookie(cookie);
-                    }
-                }
-
-                // Refresh after loading cookies to apply them
-                webDriver.Navigate().Refresh();
-            }
-        }
-
-
-
         private List<Contact> LoadContacts()
         {
             string dbPath = "Data Source=contacts.db;Version=3;";
@@ -476,7 +376,6 @@ namespace Send_Whatsapp
             }
             return contacts;
         }
-
         private void btnAdd_Click(object sender, RoutedEventArgs e)
         {
             if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
@@ -509,7 +408,6 @@ namespace Send_Whatsapp
             }
                 LoadContactsToDataGrid();
         }
-
         private void btnUpdate_Click(object sender, RoutedEventArgs e)
         {
             if (dataGridContacts.SelectedItem is Contact selectedContact)
@@ -534,7 +432,6 @@ namespace Send_Whatsapp
                 MessageBox.Show("Please select a contact to update.");
             }
         }
-
         private void btnDelete_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -583,7 +480,6 @@ namespace Send_Whatsapp
                 MessageBox.Show($"An error occurred: {ex.Message}");
             }
         }
-
         private void dataGridContacts_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Initialize StringBuilders for contact numbers and email IDs
@@ -625,7 +521,6 @@ namespace Send_Whatsapp
             txtContactNumberEntry.Text = contactNumberSb.ToString();
             txtEmailIDEntry.Text = emailIdSb.ToString();
         }
-
         private void btnImport_Click(object sender, RoutedEventArgs e)
         {
             // Open File Dialog to select Excel or CSV
@@ -700,7 +595,6 @@ namespace Send_Whatsapp
                 LoadContactsToDataGrid();
             }
         }
-
         // Optional: Manual column mapping
         public sealed class ContactMap : ClassMap<Contact>
         {
@@ -711,8 +605,6 @@ namespace Send_Whatsapp
                 Map(m => m.EmailID).Name("EmailID");
             }
         }
-
-
         // Define a model to map CSV fields
         public class ContactCsvModel
         {
@@ -733,6 +625,15 @@ namespace Send_Whatsapp
                     LoadContactsToDataGrid(); // Refresh DataGrid after deletion
                 }
             }
+
+        private void btnShowTagReplacerUI_Click(object sender, RoutedEventArgs e)
+        {
+            // Create an instance of the TagReplacerUI window
+            TagReplacer tagReplacerWindow = new TagReplacer();
+
+            // Show the window
+            tagReplacerWindow.Show();
+        }
     }
 
     public class Contact

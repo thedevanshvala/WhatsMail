@@ -6,13 +6,12 @@ namespace Send_Whatsapp
 {
     public class DbHelper
     {
-        private string dbPath = "Data Source=contacts.db;Version=3;";
+        private string dbPath = "Data Source=contact.db;Version=3;";
 
         public DbHelper()
         {
             CreateDatabase();
         }
-
         // Create the database with Contacts and EmailCredentials tables
         public void CreateDatabase()
         {
@@ -44,6 +43,28 @@ namespace Send_Whatsapp
                 }
             }
         }
+        public List<(string Tag, string Content)> LoadTagContent()
+        {
+            List<(string Tag, string Content)> tagContents = new List<(string Tag, string Content)>();
+            using (var connection = new SQLiteConnection("Data Source=tagNcontent.db"))
+            {
+                connection.Open();
+                string query = "SELECT Tag, Content FROM Tags";  // Corrected table name
+                using (var command = new SQLiteCommand(query, connection))
+                {
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            string tag = reader["Tag"].ToString();
+                            string content = reader["Content"].ToString();
+                            tagContents.Add((tag, content));
+                        }
+                    }
+                }
+            }
+            return tagContents;
+        }
 
         // Save sender email and password (clear existing credentials first)
         public void SaveSenderCredentials(string email, string password)
@@ -69,7 +90,6 @@ namespace Send_Whatsapp
                 }
             }
         }
-
         // Retrieve stored sender credentials
         public (string, string) GetSenderCredentials()
         {
@@ -93,7 +113,6 @@ namespace Send_Whatsapp
             }
             return (string.Empty, string.Empty); // Return empty if no credentials found
         }
-
         // Load Contacts from the database
         public List<Contact> LoadContacts()
         {
@@ -123,7 +142,6 @@ namespace Send_Whatsapp
             }
             return contacts;
         }
-
         // Add Contact to the database
         public void AddContact(string name, string contactNumber, string emailId)
         {
@@ -141,7 +159,6 @@ namespace Send_Whatsapp
                 }
             }
         }
-
         // Update an existing contact
         public void UpdateContact(int id, string name, string contactNumber, string emailId)
         {
@@ -160,7 +177,6 @@ namespace Send_Whatsapp
                 }
             }
         }
-
         public void DeleteAllContacts()
         {
             using (var connection = new SQLiteConnection(dbPath))
@@ -175,8 +191,6 @@ namespace Send_Whatsapp
                 }
             }
         }
-
-
         // Delete a contact from the database
         public bool DeleteContact(int contactId)
         {
