@@ -50,8 +50,10 @@ namespace Send_Whatsapp
             var options = new ChromeOptions();
             options.AddArguments("--start-maximized");
 
-            // Specify the full path to the ChromeDriver executable
-            webDriver = new ChromeDriver(@"C:\chromedriver-win64\chromedriver.exe", options);
+        // Specify the full path to the ChromeDriver executable
+        //C:\chromedriver - win64\chrome - win64\chrome - win64
+            //webDriver = new ChromeDriver(@"C:\chromedriver-win64\chrome-win64\chrome-win64\chrome.exe", options);
+            webDriver = new ChromeDriver(@"C:\chromedriver-win64\chromedriver-win64\chromedriver-win64", options);
             webDriver.Navigate().GoToUrl(WhatsAppWebUrl);
         }
         private bool IsLoggedIn()
